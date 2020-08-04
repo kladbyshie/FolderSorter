@@ -99,7 +99,7 @@ namespace FolderSorter
                         {
                             file.MoveTo(DirectoryPath + foldername + @"\" + file.Name, true);
                         }
-                        catch (Exception e)
+                        catch (Exception)
                         {
                             continue;
                         }
@@ -126,7 +126,7 @@ namespace FolderSorter
             Status = true;
             OnOffLabel.Text = "Active";
 
-            string DirectoryPath = @"C:\Users\ngara\Downloads\";
+            string DirectoryPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\Downloads\";
             string csvpath = DirectoryPath + "extensions.csv";
 
             List<string[]> Extensions = CSVLoad(csvpath);
@@ -135,13 +135,13 @@ namespace FolderSorter
             FolderSetup(DirectoryPath, FolderNames);
 
             //While loops in Load cause the UI to not load (because the single thread is occupied with the loop). Creating a new thread to contain
-            //the loop means it works well!
+            //the loop means it works. The 15000 sleep means it checks the folder every 15 seconds.
             Thread thread = new Thread(() => 
             {
                 while (true) 
                 {
                     Mover(Status, ExtensionsTable, DirectoryPath);
-                    Thread.Sleep(5000);
+                    Thread.Sleep(15000);
                 }
             });
             thread.IsBackground = true;
