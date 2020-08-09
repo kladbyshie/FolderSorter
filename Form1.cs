@@ -1,11 +1,14 @@
-﻿using System;
+﻿using Microsoft.VisualBasic.CompilerServices;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics.Eventing.Reader;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Net.NetworkInformation;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,11 +18,49 @@ namespace FolderSorter
 {
     public partial class Form1 : Form
     {
-        public bool Status { get; set; }
+        static bool Status { get; set; }
+        static string DirectoryPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\Downloads\";
 
+        //figure out how to cram extensions into settings
+
+        static string csvpath = DirectoryPath + "extensions.csv";
+ 
         public Form1()
         {
             InitializeComponent();
+        }
+
+        public void Form1_Load(object sender, EventArgs e)
+        {
+            if (Properties.Settings.Default.Directory.Length > 0)
+            {
+                DirectoryPath = Properties.Settings.Default.Directory;
+            }
+
+            DirectoryTextBox.Text = DirectoryPath;
+            StatusSwitcher(false);
+
+            if (Properties.Settings.Default.StartupBoolean == true)
+            {
+                InitializeSorter();
+                checkBox1.Checked = true;
+            }
+
+        }
+
+
+        void StatusSwitcher(bool input)
+        {
+            if (input == true)
+            {
+                Status = true;
+                OnOffLabel.Text = "On";
+            }
+            if (input == false)
+            {
+                Status = false;
+                OnOffLabel.Text = "Off";
+            }
         }
 
         static List<string[]> CSVLoad(string csvpath)
@@ -36,7 +77,7 @@ namespace FolderSorter
             }
             return NewExtensions;
         }
-        
+
         static Hashtable HashLoad(List<string[]> NewExtensions)
         {
             Hashtable ExtensionsTable = new Hashtable();
@@ -56,36 +97,9 @@ namespace FolderSorter
             return ExtensionsTable;
         }
 
-        static List<string> FolderLoad(List<string[]> NewExtensions)
+        static void Mover(Hashtable ExtensionsTable)
         {
-            List<string> FolderNames = new List<string>(); //list of folders to check for and create
-            foreach (var x in NewExtensions)
-            {
-                string newitem = x[0];
-                FolderNames.Add(newitem);
-            }
-            return FolderNames;
-        }
-
-        static void FolderSetup(string DirectoryPath, List<string> FolderNames)
-        {
-            DirectoryInfo DownloadDir = new DirectoryInfo(DirectoryPath);
-
-            FileInfo[] FileInfo = DownloadDir.GetFiles();
-            foreach (string x in FolderNames)
-            {
-                string path = DirectoryPath + x;
-                if (!Directory.Exists(path))
-                {
-                    Directory.CreateDirectory(path);
-                }
-
-            }
-        }
-
-        static void Mover(bool status, Hashtable ExtensionsTable, string DirectoryPath)
-        {
-            if (status == true)
+            if (Status == true)
             {
                 DirectoryInfo LocalDownloadDir = new DirectoryInfo(DirectoryPath);
                 FileInfo[] LocalFileInfo = LocalDownloadDir.GetFiles();
@@ -97,6 +111,12 @@ namespace FolderSorter
                     {
                         try
                         {
+                            string path = DirectoryPath + foldername;
+                            if (!Directory.Exists(path))
+                            {
+                                Directory.CreateDirectory(path);
+                            }
+
                             file.MoveTo(DirectoryPath + foldername + @"\" + file.Name, true);
                         }
                         catch (Exception)
@@ -113,7 +133,7 @@ namespace FolderSorter
         {
             foreach (List<string> x in ExtensionsTable.Keys)
             {
-                if (x.Contains(input))
+                if (x.Contains(input.ToLower()))
                 {
                     return (ExtensionsTable[x].ToString());
                 }
@@ -121,45 +141,42 @@ namespace FolderSorter
             return ("");
         }
 
-        private void Form1_Load(object sender, EventArgs e)
+        
+        public void InitializeSorter()
         {
-            Status = true;
-            OnOffLabel.Text = "Active";
+            StatusSwitcher(true);
 
-            string DirectoryPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\Downloads\";
-            string csvpath = DirectoryPath + "extensions.csv";
+            if (!File.Exists(csvpath))
+            {
+                WriteCSV();
+            }
 
             List<string[]> Extensions = CSVLoad(csvpath);
             Hashtable ExtensionsTable = HashLoad(Extensions);
-            List<string> FolderNames = FolderLoad(Extensions);
-            FolderSetup(DirectoryPath, FolderNames);
 
-            //While loops in Load cause the UI to not load (because the single thread is occupied with the loop). Creating a new thread to contain
-            //the loop means it works. The 15000 sleep means it checks the folder every 15 seconds.
-            Thread thread = new Thread(() => 
+            Thread thread = new Thread(() =>
             {
-                while (true) 
+                while (true)
                 {
-                    Mover(Status, ExtensionsTable, DirectoryPath);
+                    Mover(ExtensionsTable);
                     Thread.Sleep(15000);
                 }
             });
+
             thread.IsBackground = true;
             thread.Start();
-
 
         }
 
         private void On_Click(object sender, EventArgs e)
         {
-            Status = true;
-            OnOffLabel.Text = "Active";
+            StatusSwitcher(true);
+            InitializeSorter();
         }
 
         private void Off_Click(object sender, EventArgs e)
         {
-            Status = false;
-            OnOffLabel.Text = "Inactive";
+            StatusSwitcher(false); 
         }
 
         private void Form1_Resize(object sender, EventArgs e)
@@ -183,6 +200,38 @@ namespace FolderSorter
             this.WindowState = FormWindowState.Minimized;
             this.Hide();
             notifyIcon.Visible = true;
+        }
+
+        private void DirectorySelect_Click(object sender, EventArgs e)
+        {
+            var directory = new FolderBrowserDialog();
+            directory.ShowDialog();
+            DirectoryPath = directory.SelectedPath + @"\";
+            DirectoryTextBox.Text = DirectoryPath;
+        }
+
+        private void checkBox1_CheckedChanged(object sender, EventArgs e)
+        {
+            Properties.Settings.Default.StartupBoolean = checkBox1.Checked;
+        }
+
+        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            Properties.Settings.Default.Directory = DirectoryPath;
+            Properties.Settings.Default.Save();
+        }
+
+        private void WriteCSV()
+        {
+            using (var stream = File.CreateText(csvpath))
+            {
+                stream.WriteLine("Archives,.zip,.7z,.rar");
+                stream.WriteLine("Images,.png,.jpeg,.jpg,.gif");
+                stream.WriteLine("Music,.mp3,.wav");
+                stream.WriteLine("Videos,.mp4,.webm");
+                stream.WriteLine("Installers and Executables,.exe,.jar");
+                stream.WriteLine("Torrents,.torrent");
+            }
         }
     }
 }
