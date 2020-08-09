@@ -18,19 +18,36 @@ namespace FolderSorter
 {
     public partial class Form1 : Form
     {
-        public static bool Status { get; set; }
-        public static string DirectoryPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\Downloads\";
+        static bool Status { get; set; }
+        static string DirectoryPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\Downloads\";
 
         //figure out how to cram extensions into settings
-        static string csvpath = DirectoryPath + "extensions.csv";
-        static List<string[]> Extensions = CSVLoad(csvpath);
-        static Hashtable ExtensionsTable = HashLoad(Extensions);
-        static List<string> FolderNames = FolderLoad(Extensions);
 
+        static string csvpath = DirectoryPath + "extensions.csv";
+ 
         public Form1()
         {
             InitializeComponent();
         }
+
+        public void Form1_Load(object sender, EventArgs e)
+        {
+            if (Properties.Settings.Default.Directory.Length > 0)
+            {
+                DirectoryPath = Properties.Settings.Default.Directory;
+            }
+
+            DirectoryTextBox.Text = DirectoryPath;
+            StatusSwitcher(false);
+
+            if (Properties.Settings.Default.StartupBoolean == true)
+            {
+                InitializeSorter();
+                checkBox1.Checked = true;
+            }
+
+        }
+
 
         void StatusSwitcher(bool input)
         {
@@ -80,34 +97,7 @@ namespace FolderSorter
             return ExtensionsTable;
         }
 
-        static List<string> FolderLoad(List<string[]> NewExtensions)
-        {
-            List<string> FolderNames = new List<string>(); //list of folders to check for and create
-            foreach (var x in NewExtensions)
-            {
-                string newitem = x[0];
-                FolderNames.Add(newitem);
-            }
-            return FolderNames;
-        }
-
-        static void FolderSetup(string DirectoryPath, List<string> FolderNames)
-        {
-            DirectoryInfo DownloadDir = new DirectoryInfo(DirectoryPath);
-
-            FileInfo[] FileInfo = DownloadDir.GetFiles();
-            foreach (string x in FolderNames)
-            {
-                string path = DirectoryPath + x;
-                if (!Directory.Exists(path))
-                {
-                    Directory.CreateDirectory(path);
-                }
-
-            }
-        }
-
-        static void Mover()
+        static void Mover(Hashtable ExtensionsTable)
         {
             if (Status == true)
             {
@@ -121,6 +111,12 @@ namespace FolderSorter
                     {
                         try
                         {
+                            string path = DirectoryPath + foldername;
+                            if (!Directory.Exists(path))
+                            {
+                                Directory.CreateDirectory(path);
+                            }
+
                             file.MoveTo(DirectoryPath + foldername + @"\" + file.Name, true);
                         }
                         catch (Exception)
@@ -137,7 +133,7 @@ namespace FolderSorter
         {
             foreach (List<string> x in ExtensionsTable.Keys)
             {
-                if (x.Contains(input))
+                if (x.Contains(input.ToLower()))
                 {
                     return (ExtensionsTable[x].ToString());
                 }
@@ -145,33 +141,24 @@ namespace FolderSorter
             return ("");
         }
 
-        public void Form1_Load(object sender, EventArgs e)
-        {
-            if (Properties.Settings.Default.Directory.Length > 0)
-            {
-                DirectoryPath = Properties.Settings.Default.Directory;
-            }
-
-            DirectoryTextBox.Text = DirectoryPath;
-            StatusSwitcher(false);
-
-            if (Properties.Settings.Default.StartupBoolean == true)
-            {
-                InitializeSorter();
-                checkBox1.Checked = true;
-            } 
-
-        }
+        
         public void InitializeSorter()
         {
             StatusSwitcher(true);
-            FolderSetup(DirectoryPath, FolderNames);
+
+            if (!File.Exists(csvpath))
+            {
+                WriteCSV();
+            }
+
+            List<string[]> Extensions = CSVLoad(csvpath);
+            Hashtable ExtensionsTable = HashLoad(Extensions);
 
             Thread thread = new Thread(() =>
             {
                 while (true)
                 {
-                    Mover();
+                    Mover(ExtensionsTable);
                     Thread.Sleep(15000);
                 }
             });
@@ -232,6 +219,19 @@ namespace FolderSorter
         {
             Properties.Settings.Default.Directory = DirectoryPath;
             Properties.Settings.Default.Save();
+        }
+
+        private void WriteCSV()
+        {
+            using (var stream = File.CreateText(csvpath))
+            {
+                stream.WriteLine("Archives,.zip,.7z,.rar");
+                stream.WriteLine("Images,.png,.jpeg,.jpg,.gif");
+                stream.WriteLine("Music,.mp3,.wav");
+                stream.WriteLine("Videos,.mp4,.webm");
+                stream.WriteLine("Installers and Executables,.exe,.jar");
+                stream.WriteLine("Torrents,.torrent");
+            }
         }
     }
 }
