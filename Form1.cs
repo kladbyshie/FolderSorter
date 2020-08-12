@@ -20,9 +20,6 @@ namespace FolderSorter
     {
         static bool Status { get; set; }
         static string DirectoryPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\Downloads\";
-
-        //figure out how to cram extensions into settings
-
         static string csvpath = DirectoryPath + "extensions.csv";
  
         public Form1()
@@ -47,7 +44,6 @@ namespace FolderSorter
             }
 
         }
-
 
         void StatusSwitcher(bool input)
         {
@@ -97,36 +93,47 @@ namespace FolderSorter
             return ExtensionsTable;
         }
 
+        //This has twwo foreach loops (one to create a hashtable of "old" filesizes, one to check to see they're the same 3 seconds later)
         static void Mover(Hashtable ExtensionsTable)
         {
             if (Status == true)
             {
                 DirectoryInfo LocalDownloadDir = new DirectoryInfo(DirectoryPath);
                 FileInfo[] LocalFileInfo = LocalDownloadDir.GetFiles();
+                Hashtable PathsAndSizes = new Hashtable();
 
                 foreach (FileInfo file in LocalFileInfo)
                 {
                     string foldername = FolderFinder(file.Extension, ExtensionsTable);
+                    string folderpath = DirectoryPath + foldername;
+                    if (!Directory.Exists(folderpath))
+                    {
+                        Directory.CreateDirectory(folderpath);
+                    }
                     if (foldername.Length > 0)
                     {
-                        try
-                        {
-                            string path = DirectoryPath + foldername;
-                            if (!Directory.Exists(path))
-                            {
-                                Directory.CreateDirectory(path);
-                            }
-
-                            file.MoveTo(DirectoryPath + foldername + @"\" + file.Name, true);
-                        }
-                        catch (Exception)
-                        {
-                            continue;
-                        }
-
+                        string fullpath = DirectoryPath + foldername + @"\" + file.Name;
+                        PathsAndSizes.Add(fullpath, file.Length);
                     }
                 }
-            }
+
+                Thread.Sleep(3000);
+
+                foreach (string fullpath in PathsAndSizes.Keys)
+                {
+                    string filename = fullpath.Substring(fullpath.LastIndexOf(@"\") + 1);
+                    string oldfilepath = DirectoryPath + filename;
+
+                    FileInfo file = new FileInfo(oldfilepath);
+                    long OldSize = long.Parse(PathsAndSizes[fullpath].ToString());
+
+                    if (file.Length == OldSize)
+                    {
+                        file.MoveTo(fullpath, true);
+                    }
+
+                }
+            }      
         }
 
         static string FolderFinder(string input, Hashtable ExtensionsTable)
@@ -229,7 +236,8 @@ namespace FolderSorter
                 stream.WriteLine("Images,.png,.jpeg,.jpg,.gif");
                 stream.WriteLine("Music,.mp3,.wav");
                 stream.WriteLine("Videos,.mp4,.webm");
-                stream.WriteLine("Installers and Executables,.exe,.jar");
+                stream.WriteLine("Installers and Executables,.exe,.jar,.msi");
+                stream.WriteLine("Documents,.docx,.pdf,.doc");
                 stream.WriteLine("Torrents,.torrent");
             }
         }
